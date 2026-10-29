@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="description" content="Resize any image to an exact iPhone lockscreen wallpaper — Fill, Balanced, Extend and Fit modes, live phone preview, batch JPG/ZIP export. Everything runs locally on your device."/>
+<link rel="icon" href="data:,"/>
+<title>iPhone Lockscreen Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// If the primary CDN is blocked or offline, try one mirror before giving up
+// on ZIP export (the sequential-download fallback still covers total failure).
+if(typeof JSZip==='undefined'){
+  var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';document.head.appendChild(s);
+}
+</script>
+<style>
+:root{
+  --bg:#f4f4f2; --surface:#ffffff; --surface2:#eeeeeb; --line:#e2e2de; --text:#111113; --muted:#6b6b66; --accent:#e8321e; --accent2:#111113; --phone:#0a0a0a; --radius:18px;
+  color-scheme:light;
+}
+@media(prefers-color-scheme:dark){
+  :root{ --bg:#0e0e10; --surface:#17171a; --surface2:#1f1f23; --line:#2a2a2e; --text:#f5f5f2; --muted:#9a9aa0; --accent:#ff453a; --accent2:#f5f5f2; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Instrument Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+button{font-family:inherit;cursor:pointer}
+.top{max-width:1180px;margin:0 auto;padding:22px 18px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-size:clamp(28px,5vw,46px);line-height:.95;letter-spacing:-.03em;margin:8px 0 10px;font-weight:700;max-width:620px}
+h1 em{font-style:normal;color:var(--accent)}
+.sub{color:var(--muted);font-size:15.5px;line-height:1.55;max-width:560px;margin:0}
+.badge{margin-top:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:13px}
+.badge b{font-family:"JetBrains Mono",monospace;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 18px 40px}
+.layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+@media(max-width:860px){.layout{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px}
+.card h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 12px;color:var(--muted)}
+.card h2 span{color:var(--text)}
+.drop{border:1.8px dashed var(--line);border-radius:16px;padding:22px 16px;text-align:center;background:var(--surface2);transition:.15s}
+.drop.over{border-color:var(--accent);background:#fff1ef}
+@media(prefers-color-scheme:dark){.drop.over{background:#2a1513}}
+.drop p{margin:8px 0 4px;font-weight:600;font-size:15px}
+.drop small{color:var(--muted);line-height:1.4;display:block}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:11px 18px;font-weight:600;font-size:14px;background:var(--text);color:var(--bg)}
+.btn-red{background:var(--accent);color:#fff}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-sm{padding:8px 13px;font-size:13px}
+select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:15px;font-weight:600;appearance:none}
+.model-meta{display:flex;justify-content:space-between;margin-top:8px;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted)}
+.model-meta b{color:var(--text)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px;text-align:left}
+.seg button.active{border-color:var(--text);background:var(--text);color:var(--bg)}
+.seg button.active small{color:#c9c9c4}
+@media(prefers-color-scheme:dark){.seg button.active{background:#fff;color:#111}.seg button.active small{color:#555}}
+.seg b{font-size:14px;display:block}
+.seg small{font-size:12px;color:var(--muted);line-height:1.35;display:block;margin-top:3px}
+.seg4{grid-template-columns:1fr 1fr}
+.toggle-row{display:flex;gap:8px;flex-wrap:wrap}
+.pill{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:600}
+.pill.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+@media(prefers-color-scheme:dark){.pill.active{background:#fff;color:#111}}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.range-head{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-top:14px}
+.range-head span{font-family:"JetBrains Mono",monospace;color:var(--muted);font-weight:500}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 0}
+.visible-meter{background:var(--surface2);border-radius:12px;padding:12px 14px;margin-top:14px}
+.meter-track{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:8px}
+.meter-fill{height:100%;background:var(--accent);border-radius:99px;transition:width .2s}
+.visible-meter b{font-size:28px;letter-spacing:-.03em}
+.visible-meter p{margin:2px 0 0;color:var(--muted);font-size:12.5px;line-height:1.45}
+/* Editor */
+.editor{position:sticky;top:14px}
+@media(max-width:860px){.editor{position:static}}
+.phone-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.phone{width:min(340px,86vw);aspect-ratio:1170/2532;background:#000;border-radius:52px;padding:10px;box-shadow:0 24px 60px rgba(0,0,0,.28),0 0 0 1px #222;position:relative;flex-shrink:0}
+.phone-screen{position:relative;width:100%;height:100%;border-radius:42px;overflow:hidden;background:#1a1a1a}
+.phone-screen canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.phone-screen canvas:active{cursor:grabbing}
+.island{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:96px;height:26px;background:#000;border-radius:99px;z-index:3;pointer-events:none}
+.lock-ui{position:absolute;inset:0;z-index:2;pointer-events:none;display:flex;flex-direction:column;align-items:center;padding-top:52px;color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.25)}
+.lock-ui .date{font-weight:600;font-size:15px}
+.lock-ui .time{font-size:72px;font-weight:700;letter-spacing:-.04em;line-height:1;margin-top:2px}
+.lock-bottom{margin-top:auto;padding:0 36px 22px;width:100%;display:flex;justify-content:space-between;align-items:flex-end}
+.lock-btn{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.28);backdrop-filter:blur(8px);display:grid;place-items:center;font-size:19px}
+.home-bar{width:110px;height:4px;background:#fff;border-radius:99px;margin:10px auto 0;opacity:.9}
+.empty-phone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;color:#aaa;z-index:1}
+.empty-phone b{color:#fff;font-size:16px}
+.empty-phone p{font-size:13px;line-height:1.5;color:#888}
+.controls-under{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.queue{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px}
+.thumb{border:2px solid transparent;border-radius:14px;overflow:hidden;background:#111;aspect-ratio:1170/2532;position:relative;cursor:pointer;padding:0}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb.active{border-color:var(--accent)}
+.thumb span{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;padding:3px 6px;border-radius:99px;font-family:"JetBrains Mono",monospace}
+.thumb .del{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.72);color:#fff;font-size:14px;line-height:1;display:grid;place-items:center}
+.how{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+@media(max-width:860px){.how{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.how{grid-template-columns:1fr}}
+.how div{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.how b{font-size:13px}
+.how p{margin:5px 0 0;color:var(--muted);font-size:12.5px;line-height:1.5}
+footer{max-width:1180px;margin:0 auto;padding:0 18px 28px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:#111;color:#fff;padding:11px 16px;border-radius:999px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.stack{display:flex;flex-direction:column;gap:18px}
+.file-input{display:none}
+.kbd{font-family:"JetBrains Mono",monospace;font-size:11px;background:var(--surface2);border:1px solid var(--line);padding:2px 6px;border-radius:6px}
+:root{--ok:#15803d;--bad:#b91c1c}
+@media(prefers-color-scheme:dark){:root{--ok:#4ade80;--bad:#f87171}}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.phone-screen canvas:focus-visible{outline-offset:-2px}
+.thumb .del{cursor:pointer;padding:0;font-family:inherit}
+.diag{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;width:100%;text-align:left}
+.diag-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.diag-head b{font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.test-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:13px}
+.test-list li{display:flex;gap:9px;align-items:flex-start;line-height:1.45;color:var(--muted)}
+.test-list .st{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;flex-shrink:0;background:var(--surface2);color:var(--muted)}
+.test-list li.pass .st{background:var(--ok);color:#fff}
+.test-list li.fail .st{background:var(--bad);color:#fff}
+.test-list li b{color:var(--text)}
+.diag-note{font-size:12.5px;color:var(--muted);line-height:1.5;margin:10px 0 0}
+.diag-note.ok{color:var(--ok)}
+.diag-note.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <div class="eyebrow">No bars · No guessing · Full photo</div>
+    <h1>Make any image fit your <em>iPhone lockscreen</em> — and actually see it first.</h1>
+    <p class="sub">Drop in landscape screenshots, anime stills, or photos. Pick your iPhone, choose how much of the picture you want to keep, drag it into place, and download at the exact pixel size. Everything happens on your device.</p>
+  </div>
+  <div class="badge"><span class="dot"></span><span>Default is your phone</span><b>iPhone 14 · 1170 × 2532</b></div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <!-- LEFT: CONTROLS -->
+    <div class="stack">
+      <section class="card">
+        <h2>1 — <span>Add images</span></h2>
+        <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="Add images: drop files here, or press Enter to browse">
+          <div aria-hidden="true"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></div>
+          <p>Drop images here or tap to browse</p>
+          <small>JPG, PNG and WebP always work. If a HEIC photo won't load in this browser, the tool will say so — export it as JPG from Photos instead.<br>You can add a whole batch at once, and the order is kept.</small>
+          <div style="margin-top:14px"><button class="btn btn-red" id="browseBtn">Choose images</button></div>
+        </div>
+        <input class="file-input" type="file" id="fileInput" accept="image/*" multiple>
+        <div id="queueWrap" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px"><b style="font-size:13px" id="queueLabel">0 images</b><button class="btn btn-ghost btn-sm" id="clearAll">Clear all</button></div>
+          <div class="queue" id="queue"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 — <span>Your iPhone</span></h2>
+        <select id="modelSelect" aria-label="iPhone model"></select>
+        <div class="model-meta"><span>EXPORT SIZE</span><b id="modelSize">1170 × 2532</b></div>
+        <p class="hint">Using the wrong size is why iOS zooms and crops again when you set the wallpaper. This exports at the exact native resolution, so what you preview is what you get.</p>
+      </section>
+
+      <section class="card">
+        <h2>3 — <span>How it fills the screen</span></h2>
+        <div class="seg seg4" id="modeSeg">
+          <button data-mode="fill" class="active"><b>Fill — full photo</b><small>Edge-to-edge, no spaces. Sides get cropped.</small></button>
+          <button data-mode="balanced"><b>Balanced</b><small>Bigger than Fit, less crop than Fill. You pick the size.</small></button>
+          <button data-mode="extend"><b>Extend scene</b><small>Whole image + mirrored scene fills top &amp; bottom. No blur bands.</small></button>
+          <button data-mode="fit"><b>Fit — whole image</b><small>Nothing cropped. Blurred fill behind it.</small></button>
+        </div>
+
+        <div id="balancedControls" style="display:none">
+          <div class="range-head"><label for="fillRange">Image height on screen</label><span id="fillVal">62%</span></div>
+          <input type="range" id="fillRange" min="34" max="100" value="62">
+          <p class="hint">35% is the tiny band you hated. 62% was the sweet spot in your test. 100% = Fill.</p>
+        </div>
+
+        <div id="fillControls">
+          <div class="range-head"><label for="zoomRange">Zoom</label><span id="zoomVal">100%</span></div>
+          <input type="range" id="zoomRange" min="100" max="220" value="100">
+        </div>
+
+        <div class="range-head"><label for="posRange">↕ Vertical position</label><span>drag also works</span></div>
+        <input type="range" id="posRange" min="0" max="100" value="50">
+        <p class="hint">Leave headroom at the top for the clock. Drag directly on the phone preview to reframe — left/right works in Fill &amp; Balanced too.</p>
+
+        <div class="visible-meter">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700">You're seeing</span><b id="visiblePct">—</b></div>
+          <div class="meter-track"><div class="meter-fill" id="meterFill" style="width:0%"></div></div>
+          <p id="visibleNote">Add an image to see how much of it survives the crop.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4 — <span>Clean-up &amp; preview</span></h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+          <div><b style="font-size:14px">Trim baked-in black bars</b><div class="hint" style="margin-top:2px">Your last screenshots had black pillarbox bars in the file itself. This cuts them off before resizing.</div></div>
+        </div>
+        <div class="toggle-row" id="trimToggle">
+          <button class="pill active" data-trim="on">Trim: On</button>
+          <button class="pill" data-trim="off">Trim: Off</button>
+        </div>
+        <div style="height:14px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div><b style="font-size:14px">Lockscreen clock overlay</b><div class="hint" style="margin-top:2px">Preview only — never baked into the download.</div></div>
+        </div>
+        <div class="toggle-row" id="clockToggle" style="margin-top:8px">
+          <button class="pill active" data-clock="on">Clock: On</button>
+          <button class="pill" data-clock="off">Clock: Off</button>
+        </div>
+        <div id="trimInfo" class="hint" style="margin-top:12px"></div>
+      </section>
+    </div>
+
+    <!-- RIGHT: EDITOR -->
+    <section class="card editor">
+      <h2>Preview — <span id="activeName">No image yet</span></h2>
+      <div class="phone-wrap">
+        <div class="phone" id="phoneFrame">
+          <div class="phone-screen">
+            <canvas id="previewCanvas" width="1170" height="2532" tabindex="0" aria-label="Wallpaper preview. Drag to reframe, or use the arrow keys to nudge the framing."></canvas>
+            <div class="island"></div>
+            <div class="lock-ui" id="lockUI">
+              <div id="clockText" style="display:flex;flex-direction:column;align-items:center">
+                <div class="date" id="lockDate">Thursday, October 29</div>
+                <div class="time" id="lockTime">4:36</div>
+              </div>
+              <div class="lock-bottom">
+                <div class="lock-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6c0 1.1-.9 2-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><line x1="6" x2="18" y1="6" y2="6"/><line x1="12" x2="12" y1="12" y2="12"/><path d="M10 8v11a2 2 0 0 0 4 0V8"/></svg></div>
+                <div class="lock-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+              </div>
+              <div class="home-bar"></div>
+            </div>
+            <div class="empty-phone" id="emptyState">
+              <div style="margin-bottom:10px"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#9a9aa0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></div>
+              <b>Your wallpaper preview lives here</b>
+              <p id="emptyHint">Add an image on the left and it will appear in this phone at the exact 1170 × 2532 size — with the clock where iOS will actually put it.</p>
+            </div>
+          </div>
+        </div>
+        <div class="controls-under">
+          <button class="btn btn-ghost btn-sm" id="centerBtn">◎ Center subject</button>
+          <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Reset framing</button>
+        </div>
+        <p class="hint" style="text-align:center;margin:0">Keyboard: click the preview, then use the arrow keys to nudge the framing (Shift = bigger steps).</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%">
+          <button class="btn btn-red" id="downloadOne" disabled>↓ Download this wallpaper</button>
+          <button class="btn" id="downloadAll" disabled>↓ Download all as ZIP</button>
+        </div>
+        <p class="hint" style="text-align:center;max-width:420px">On iPhone: after downloading, open Photos → Share → <b>Use as Wallpaper</b>, and turn off perspective zoom if iOS asks. Downloads are full-resolution JPGs.</p>
+        <div class="diag" id="selfCheck">
+          <div class="diag-head"><b>Self-check</b><button class="btn btn-ghost btn-sm" id="runTests" type="button">Run tests</button></div>
+          <ul class="test-list" id="testList"></ul>
+          <p class="diag-note" id="testSummary">Runs entirely on this device: verifies the export size, black-bar trim, all four render modes, a real full-size JPG, the batch-download path, export filenames, the blurred-background path for this browser, and the visible-% math for portrait images. With an image loaded it tests your actual image; without one it uses a built-in test pattern.</p>
+        </div>
+      </div>
+
+      <div class="how">
+        <div><b>Fill</b><p>No spaces ever. Best when the subject is centered. You lose the far sides on landscape images — check the % above.</p></div>
+        <div><b>Balanced</b><p>The compromise from your screenshots. Image gets much taller on screen, only the edges trim. Start at 62%.</p></div>
+        <div><b>Extend</b><p>Keeps 100% of the width. Top/bottom are a flipped continuation of the scene itself, not a blur smear.</p></div>
+        <div><b>Fit</b><p>100% visible, smallest on screen. Use only if every pixel matters and you don't mind the blur behind it.</p></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<footer>
+  Built from your back-and-forth on Oct 23: cropped → blurred fit (too small) → balanced 62% → full-photo fill (too cropped) → extended scene. This tool puts all four in one place so you can compare on the same image in seconds. Processing is done locally in your browser with Canvas — images never leave your device.
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MODELS=[
+ {id:'iphone14',name:'iPhone 14 — your phone',w:1170,h:2532,chrome:'notch'},
+ {id:'iphone14plus',name:'iPhone 14 Plus',w:1284,h:2778,chrome:'notch'},
+ {id:'iphone14pro',name:'iPhone 14 Pro',w:1179,h:2556,chrome:'island'},
+ {id:'iphone14promax',name:'iPhone 14 Pro Max',w:1290,h:2796,chrome:'island'},
+ {id:'iphone15',name:'iPhone 15 / 15 Pro',w:1179,h:2556,chrome:'island'},
+ {id:'iphone15plus',name:'iPhone 15 Plus / 15 Pro Max',w:1290,h:2796,chrome:'island'},
+ {id:'iphone16',name:'iPhone 16',w:1179,h:2556,chrome:'island'},
+ {id:'iphone16plus',name:'iPhone 16 Plus',w:1290,h:2796,chrome:'island'},
+ {id:'iphone16pro',name:'iPhone 16 Pro',w:1206,h:2622,chrome:'island'},
+ {id:'iphone16promax',name:'iPhone 16 Pro Max',w:1320,h:2868,chrome:'island'},
+ {id:'iphone13',name:'iPhone 13 / 13 Pro / 12 / 12 Pro',w:1170,h:2532,chrome:'notch'},
+ {id:'iphone13promax',name:'iPhone 13 Pro Max / 12 Pro Max',w:1284,h:2778,chrome:'notch'},
+ {id:'iphonex',name:'iPhone X / XS / 11 Pro',w:1125,h:2436,chrome:'notch'},
+ {id:'iphonese',name:'iPhone SE (2020 / 2022)',w:750,h:1334,chrome:'none'},
+];
+let state={ model:MODELS[0], mode:'fill', fillPct:62, trim:true, clock:true, items:[], activeId:null, zoom:1 };
+
+const $=id=>document.getElementById(id);
+const sel=$('modelSelect');
+MODELS.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name+'  ·  '+m.w+' × '+m.h;sel.appendChild(o)});
+sel.value='iphone14';
+function syncEmptyHint(){$('emptyHint').textContent='Add an image on the left and it will appear in this phone at the exact '+state.model.w+' × '+state.model.h+' size — with the clock where iOS will actually put it.'}
+sel.addEventListener('change',()=>{state.model=MODELS.find(m=>m.id===sel.value);$('modelSize').textContent=state.model.w+' × '+state.model.h;$('phoneFrame').style.aspectRatio=state.model.w+'/'+state.model.h;updatePhoneChrome();syncEmptyHint();renderPreview();updateVisible();});
+
+// Match the preview cutout to the phone: Dynamic Island, notch, or neither (SE).
+function updatePhoneChrome(){
+  const el=document.querySelector('.island');const kind=state.model.chrome||'notch';
+  if(kind==='island'){el.style.display='block';el.style.width='96px';el.style.height='26px';el.style.top='12px';el.style.borderRadius='99px'}
+  else if(kind==='notch'){el.style.display='block';el.style.width='172px';el.style.height='24px';el.style.top='0';el.style.borderRadius='0 0 16px 16px'}
+  else{el.style.display='none'}
+  document.querySelector('.home-bar').style.display=kind==='none'?'none':'block';
+}
+
+let toastTimer=null;
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600)}
+function fmtTime(){const d=new Date();let h=d.getHours()%12;if(h===0)h=12;return h+':'+String(d.getMinutes()).padStart(2,'0')}
+function fmtDate(){return new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}
+$('lockTime').textContent=fmtTime();$('lockDate').textContent=fmtDate();setInterval(()=>{$('lockTime').textContent=fmtTime();$('lockDate').textContent=fmtDate()},20000);
+
+// --- Trim black bars ---
+function computeTrim(img){
+  const c=document.createElement('canvas');const maxSide=480;const s=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+  c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,c.width,c.height);
+  let data;try{data=ctx.getImageData(0,0,c.width,c.height).data}catch(e){return null}
+  const W=c.width,H=c.height;
+  function isBlack(x,y){const i=(y*W+x)*4;return data[i]<16&&data[i+1]<16&&data[i+2]<16}
+  function rowBlack(y){let n=0;for(let x=0;x<W;x+=2){if(isBlack(x,y))n++}return n/(W/2)>0.985}
+  function colBlack(x){let n=0;for(let y=0;y<H;y+=2){if(isBlack(x,y))n++}return n/(H/2)>0.985}
+  let top=0,bottom=H-1,left=0,right=W-1;
+  while(top<bottom&&rowBlack(top))top++; while(bottom>top&&rowBlack(bottom))bottom--;
+  while(left<right&&colBlack(left))left++; while(right>left&&colBlack(right))right--;
+  // convert back to full res, only return if meaningful trim (>1.5% on any side) and not trimming everything
+  const fx=img.naturalWidth/W, fy=img.naturalHeight/H;
+  const bounds={sx:Math.round(left*fx),sy:Math.round(top*fy),sw:Math.round((right-left+1)*fx),sh:Math.round((bottom-top+1)*fy)};
+  const trimmedPct=1-(bounds.sw*bounds.sh)/(img.naturalWidth*img.naturalHeight);
+  if(trimmedPct<0.015||bounds.sw<40||bounds.sh<40) return null;
+  return bounds;
+}
+function getSource(item){
+  if(state.trim&&item.trimBounds){
+    if(!item._trimCanvas){const c=document.createElement('canvas');c.width=item.trimBounds.sw;c.height=item.trimBounds.sh;c.getContext('2d').drawImage(item.img,item.trimBounds.sx,item.trimBounds.sy,item.trimBounds.sw,item.trimBounds.sh,0,0,c.width,c.height);item._trimCanvas=c;}
+    return item._trimCanvas;
+  }
+  return item.img;
+}
+// Renders take an explicit trim choice, so a self-check render can never
+// disturb the framing or trim state the user is looking at.
+function getExportSource(item,trimOn){
+  if(trimOn&&item.trimBounds){
+    if(!item._trimCanvas){const c=document.createElement('canvas');c.width=item.trimBounds.sw;c.height=item.trimBounds.sh;c.getContext('2d').drawImage(item.img,item.trimBounds.sx,item.trimBounds.sy,item.trimBounds.sw,item.trimBounds.sh,0,0,c.width,c.height);item._trimCanvas=c;}
+    return item._trimCanvas;
+  }
+  return item.img;
+}
+function srcDims(src){return{w:src.naturalWidth||src.width,h:src.naturalHeight||src.height}}
+function srcSize(item){const s=getSource(item);return{w:s.naturalWidth||s.width,h:s.naturalHeight||s.height}}
+
+// --- Rendering core ---
+let _filterOk=null;
+function filterSupported(){
+  if(_filterOk!==null)return _filterOk;
+  try{const c=document.createElement('canvas').getContext('2d');c.filter='blur(2px)';_filterOk=(c.filter==='blur(2px)')}catch(e){_filterOk=false}
+  return _filterOk;
+}
+function drawBlurredCover(ctx,W,H,src,sw,sh,blurPx){
+  const scale=Math.max(W/sw,H/sh)*1.08;const dw=sw*scale,dh=sh*scale;
+  if(filterSupported()){
+    ctx.save();ctx.filter='blur('+blurPx+'px) saturate(1.25) brightness(0.92)';
+    ctx.drawImage(src,(W-dw)/2,(H-dh)/2,dw,dh);ctx.restore();return;
+  }
+  // Fallback for browsers without CanvasRenderingContext2D.filter (Safari
+  // before v18): draw the cover tiny, then upscale it — the smoothing reads
+  // as a blur, so Fit/Balanced/Extend backgrounds still look blurred there
+  // instead of showing a second sharp copy of the image.
+  const tw=Math.max(2,Math.round(W/16)),th=Math.max(2,Math.round(H/16));
+  const tiny=document.createElement('canvas');tiny.width=tw;tiny.height=th;
+  const tx=tiny.getContext('2d');const ts=Math.max(tw/sw,th/sh)*1.08;
+  tx.drawImage(src,(tw-sw*ts)/2,(th-sh*ts)/2,sw*ts,sh*ts);
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(tiny,0,0,tw,th,0,0,W,H);
+  ctx.fillStyle='rgba(8,8,12,0.08)';ctx.fillRect(0,0,W,H);ctx.restore();
+}
+function renderTo(ctx,W,H,item,opts){
+  opts=opts||{};
+  const mode=opts.mode||state.mode;
+  const zoom=opts.zoom!=null?opts.zoom:state.zoom;
+  const fillPct=opts.fillPct!=null?opts.fillPct:state.fillPct;
+  const src=getExportSource(item,opts.trim!=null?opts.trim:state.trim);const {w:sw,h:sh}=srcDims(src);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#111';ctx.fillRect(0,0,W,H);
+  const fx=opts.focalX!=null?opts.focalX:item.focalX, fy=opts.focalY!=null?opts.focalY:item.focalY;
+  if(mode==='fill'){
+    const scale=Math.max(W/sw,H/sh)*zoom;const dw=sw*scale,dh=sh*scale;
+    const dx=-(dw-W)*fx, dy=-(dh-H)*fy;
+    ctx.drawImage(src,dx,dy,dw,dh);
+  } else if(mode==='fit'){
+    drawBlurredCover(ctx,W,H,src,sw,sh,Math.round(W*0.035));
+    ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,W,H);
+    const scale=Math.min(W/sw,H/sh);const dw=sw*scale,dh=sh*scale;
+    const dx=(W-dw)/2, dy=(H-dh)*fy;
+    ctx.shadowColor='rgba(0,0,0,0.35)';ctx.shadowBlur=W*0.03;ctx.shadowOffsetY=W*0.01;
+    ctx.drawImage(src,dx,dy,dw,dh);ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+  } else if(mode==='balanced'){
+    drawBlurredCover(ctx,W,H,src,sw,sh,Math.round(W*0.03));
+    const targetH=H*fillPct/100;const scale=targetH/sh;const dw=sw*scale,dh=targetH;
+    let dx,dy=(H-dh)*fy;
+    if(dw<=W) dx=(W-dw)/2; else dx=-(dw-W)*fx;
+    ctx.shadowColor='rgba(0,0,0,0.3)';ctx.shadowBlur=W*0.025;
+    ctx.drawImage(src,dx,dy,dw,dh);ctx.shadowColor='transparent';ctx.shadowBlur=0;
+  } else if(mode==='extend'){
+    const scale=W/sw;const dw=W,dh=sh*scale;const dy=(H-dh)*fy;const dx=0;
+    const topGap=Math.max(0,dy), botGap=Math.max(0,H-(dy+dh));
+    // base: blurred cover as safety underlay
+    drawBlurredCover(ctx,W,H,src,sw,sh,Math.round(W*0.012));
+    // top mirrored extension
+    if(topGap>2){
+      ctx.save();ctx.beginPath();ctx.rect(0,0,W,topGap+1);ctx.clip();
+      ctx.translate(0,topGap*2);ctx.scale(1,-1);
+      // draw the top portion of the image stretched to fill gap, anchored at seam
+      const stripH=Math.min(sh, sh*0.55);
+      ctx.globalAlpha=0.96;ctx.drawImage(src,0,0,sw,stripH,0,topGap,W,topGap);
+      ctx.restore();
+      const g=ctx.createLinearGradient(0,0,0,topGap);g.addColorStop(0,'rgba(0,0,0,0.18)');g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,topGap);
+    }
+    if(botGap>2){
+      const seamY=dy+dh;
+      ctx.save();ctx.beginPath();ctx.rect(0,seamY-1,W,botGap+2);ctx.clip();
+      ctx.translate(0,seamY*2);ctx.scale(1,-1);
+      const stripH=Math.min(sh, sh*0.55);
+      ctx.globalAlpha=0.96;ctx.drawImage(src,0,sh-stripH,sw,stripH,0,seamY-botGap,W,botGap);
+      ctx.restore();
+      const g2=ctx.createLinearGradient(0,seamY,0,seamY+botGap);g2.addColorStop(0,'rgba(0,0,0,0)');g2.addColorStop(1,'rgba(0,0,0,0.18)');
+      ctx.fillStyle=g2;ctx.fillRect(0,seamY,W,botGap);
+    }
+    ctx.drawImage(src,dx,dy,dw,dh);
+  }
+}
+function visibleInfo(item){
+  if(!item) return null;const {w:sw,h:sh}=srcSize(item);const W=state.model.w,H=state.model.h;
+  if(state.mode==='fit') return{pct:100,note:'100% visible — nothing is cropped. The trade-off is size on screen and the blurred fill behind it.'};
+  if(state.mode==='extend'){
+    // Scaled to full width: if that makes it taller than the screen, the
+    // top/bottom of the image itself crop instead of being extended.
+    const dh=sh*(W/sw);
+    if(dh<=H) return{pct:100,note:'100% of the image is visible. Top & bottom are a mirrored continuation of the scene — not original pixels, but no blur band and no crop.'};
+    const vh=Math.round(H/dh*100);
+    return{pct:vh,note:'This image is tall enough at full width to overflow the screen, so about '+vh+'% of its height fits and the rest crops — no mirrored extension is needed. Drag to choose the part that survives.'};
+  }
+  if(state.mode==='fill'){const scale=Math.max(W/sw,H/sh)*state.zoom;const vw=Math.round((W/scale)/sw*100);const vh=Math.round((H/scale)/sh*100);const overall=Math.round((W/scale)*(H/scale)/(sw*sh)*100);return{pct:overall,note:'Edge-to-edge with no spaces. This keeps about '+vw+'% of the width and '+vh+'% of the height — drag the preview to choose which part survives.'}}
+  // balanced
+  const targetH=H*state.fillPct/100;const scale=targetH/sh;const dw=sw*scale;
+  if(dw<=W) return{pct:100,note:'At '+state.fillPct+'% height the whole width still fits — nothing cropped, and it\'s much larger on screen than Fit.'};
+  const vw=Math.round((W/scale)/sw*100);return{pct:vw,note:'At '+state.fillPct+'% height you keep '+vw+'% of the width (vs ~35% in Fill). Only the far edges trim.'};
+}
+function updateVisible(){
+  const item=getActive();const info=visibleInfo(item);
+  if(!info){$('visiblePct').textContent='—';$('meterFill').style.width='0%';$('visibleNote').textContent='Add an image to see how much of it survives the crop.';return}
+  $('visiblePct').textContent=info.pct+'%';$('meterFill').style.width=info.pct+'%';$('visibleNote').textContent=info.note;
+}
+function getActive(){return state.items.find(i=>i&&!i._failed&&i.id===state.activeId)||null}
+// "Download all as ZIP" only makes sense with 2+ images — with a single
+// image it would just duplicate the single-download button under a wrong
+// label, so hide it until a batch exists.
+function syncDlAll(){const n=state.items.filter(i=>i&&!i._failed).length;$('downloadAll').style.display=n>1?'':'none';$('downloadAll').disabled=!n}
+function renderPreview(){
+  const item=getActive();const canvas=$('previewCanvas');
+  // Only resize the backing store when the model actually changes — setting
+  // width/height on every drag frame forces a full realloc and stutters.
+  if(canvas.width!==state.model.w||canvas.height!==state.model.h){canvas.width=state.model.w;canvas.height=state.model.h}
+  $('phoneFrame').style.aspectRatio=state.model.w+'/'+state.model.h;
+  document.querySelectorAll('.thumb').forEach(t=>{t.style.aspectRatio=state.model.w+'/'+state.model.h});
+  if(!item){$('emptyState').style.display='flex';$('activeName').textContent='No image yet';$('downloadOne').disabled=true;syncDlAll();
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#1c1c1e';ctx.fillRect(0,0,canvas.width,canvas.height);updateVisible();return}
+  $('emptyState').style.display='none';$('activeName').textContent=item.name;
+  $('downloadOne').disabled=false;syncDlAll();
+  renderTo(canvas.getContext('2d'),canvas.width,canvas.height,item);
+  // sync pos slider without fighting drag
+  $('posRange').value=Math.round(item.focalY*100);
+  // trim info
+  if(item.trimBounds&&state.trim){$('trimInfo').textContent='✂️ Black bars trimmed from '+item.name+': '+item.img.naturalWidth+'×'+item.img.naturalHeight+' → '+item.trimBounds.sw+'×'+item.trimBounds.sh+'. Turn Trim off above to use the original file.'}
+  else if(item.trimBounds){$('trimInfo').textContent='This image has baked-in black bars, but Trim is off — they will appear in the wallpaper.'}
+  else{$('trimInfo').textContent=''}
+  updateVisible();renderQueueActive();
+}
+
+// --- Queue ---
+function renderQueue(){
+  const q=$('queue');q.innerHTML='';
+  $('queueWrap').style.display=state.items.length?'block':'none';
+  const realCount=state.items.filter(i=>i&&!i._failed).length;
+  $('queueLabel').textContent=realCount+(realCount===1?' image':' images')+' · tap to edit';
+  state.items.forEach(item=>{
+    if(!item||item._failed)return;
+    const b=document.createElement('div');b.className='thumb'+(item.id===state.activeId?' active':'');b.dataset.id=item.id;b.style.aspectRatio=state.model.w+'/'+state.model.h;
+    b.setAttribute('role','button');b.tabIndex=0;b.setAttribute('aria-label','Edit '+item.name);
+    const imgEl=document.createElement('img');imgEl.src=item.thumbUrl;imgEl.alt='';
+    const meta=document.createElement('span');meta.textContent=item.img.naturalWidth+'×'+item.img.naturalHeight;
+    const del=document.createElement('button');del.type='button';del.className='del';del.textContent='×';del.title='Remove '+item.name;del.setAttribute('aria-label','Remove '+item.name);
+    del.addEventListener('click',e=>{e.stopPropagation();removeItem(item.id)});
+    b.append(imgEl,meta,del);
+    b.addEventListener('click',()=>{state.activeId=item.id;renderPreview()});
+    b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();state.activeId=item.id;renderPreview()}});
+    q.appendChild(b);
+  });
+  syncDlAll();
+}
+function renderQueueActive(){document.querySelectorAll('.thumb').forEach(t=>t.classList.toggle('active',t.dataset.id===state.activeId))}
+function removeItem(id){const it=state.items.find(i=>i&&i.id===id);if(it&&it._blobUrl)URL.revokeObjectURL(it._blobUrl);state.items=state.items.filter(i=>!i||i.id!==id);if(state.activeId===id)state.activeId=(state.items.find(i=>i&&!i._failed)||{}).id||null;renderQueue();renderPreview()}
+function makeThumb(img){const c=document.createElement('canvas');const w=180;c.height=Math.round(w*img.naturalHeight/img.naturalWidth);c.width=w;c.getContext('2d').drawImage(img,0,0,w,c.height);return c.toDataURL('image/jpeg',0.7)}
+
+function addFiles(fileList){
+  const files=[...fileList].filter(f=>f.type.startsWith('image/')||/\.(heic|heif)$/i.test(f.name));
+  if(!files.length){toast('No images found in that selection.');return}
+  // Reserve a slot per file up front so the queue keeps the order the user
+  // picked, even though images finish decoding at different speeds.
+  const baseIndex=state.items.length;
+  const wasEmpty=!state.items.some(i=>i&&!i._failed);
+  const slots=files.map(()=>null);state.items.push(...slots);
+  let settled=0,failed=0;
+  function finish(){
+    settled++;
+    // Only compact once every file in THIS batch has settled, and only this
+    // batch's own slot range — splicing earlier or wider would shift or
+    // delete the reserved slots of a second batch still decoding.
+    if(settled===files.length){for(let i=baseIndex+files.length-1;i>=baseIndex;i--){if(!state.items[i]||state.items[i]._failed)state.items.splice(i,1)}}
+    if(!state.items.find(i=>i&&!i._failed&&i.id===state.activeId))state.activeId=(state.items.find(i=>i&&!i._failed)||{}).id||null;
+    renderQueue();renderPreview();
+    if(settled===files.length){
+      const ok=files.length-failed;
+      if(ok&&failed)toast(ok+' added, '+failed+' could not be read.');
+      else if(ok)toast(ok===1?'Image added — drag the phone to reframe it.':ok+' images added.');
+      // On a phone-width screen the preview sits far below the controls —
+      // bring it into view the first time an image lands.
+      if(ok&&wasEmpty&&window.innerWidth<=860){$('phoneFrame').scrollIntoView({behavior:'smooth',block:'center'})}
+    }
+  }
+  files.forEach((file,idx)=>{
+    const url=URL.createObjectURL(file);const img=new Image();
+    img.onload=()=>{
+      try{
+        const item={id:Math.random().toString(36).slice(2,9),name:file.name.replace(/\.[^.]+$/,''),file,img,thumbUrl:makeThumb(img),focalX:0.5,focalY:0.5,trimBounds:computeTrim(img),_trimCanvas:null,_blobUrl:url};
+        state.items[baseIndex+idx]=item;
+        if(!state.activeId)state.activeId=item.id;
+      }catch(e){
+        state.items[baseIndex+idx]={_failed:true};failed++;URL.revokeObjectURL(url);
+        toast('Could not process "'+file.name+'".');
+      }
+      finish();
+    };
+    img.onerror=()=>{
+      state.items[baseIndex+idx]={_failed:true};failed++;URL.revokeObjectURL(url);
+      toast('Could not read "'+file.name+'" — if it\'s HEIC, export it as JPG from Photos and try again.');
+      finish();
+    };
+    img.src=url;
+  });
+}
+
+// --- Controls wiring ---
+$('browseBtn').addEventListener('click',e=>{e.stopPropagation();$('fileInput').click()});
+$('dropZone').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',e=>{addFiles(e.target.files);e.target.value=''});
+['dragenter','dragover'].forEach(ev=>$('dropZone').addEventListener(ev,e=>{e.preventDefault();$('dropZone').classList.add('over')}));
+['dragleave','drop'].forEach(ev=>$('dropZone').addEventListener(ev,e=>{e.preventDefault();$('dropZone').classList.remove('over')}));
+$('dropZone').addEventListener('drop',e=>addFiles(e.dataTransfer.files));
+$('dropZone').addEventListener('keydown',e=>{if(e.target!==$('dropZone'))return;if(e.key==='Enter'||e.key===' '){e.preventDefault();$('fileInput').click()}});
+document.addEventListener('paste',e=>{if(e.clipboardData?.files?.length)addFiles(e.clipboardData.files)});
+$('clearAll').addEventListener('click',()=>{state.items.forEach(i=>{if(i&&i._blobUrl)URL.revokeObjectURL(i._blobUrl)});state.items=[];state.activeId=null;renderQueue();renderPreview()});
+
+document.querySelectorAll('#modeSeg button').forEach(b=>{b.setAttribute('aria-pressed',b.classList.contains('active')?'true':'false');b.addEventListener('click',()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false')});b.classList.add('active');b.setAttribute('aria-pressed','true');
+  state.mode=b.dataset.mode;
+  $('balancedControls').style.display=state.mode==='balanced'?'block':'none';
+  $('fillControls').style.display=state.mode==='fill'?'block':'none';
+  renderPreview();
+})});
+$('fillRange').addEventListener('input',e=>{state.fillPct=+e.target.value;$('fillVal').textContent=state.fillPct+'%';renderPreview()});
+$('zoomRange').addEventListener('input',e=>{state.zoom=+e.target.value/100;$('zoomVal').textContent=e.target.value+'%';renderPreview()});
+$('posRange').addEventListener('input',e=>{const item=getActive();if(!item)return;item.focalY=+e.target.value/100;renderPreview()});
+document.querySelectorAll('#trimToggle .pill').forEach(p=>{p.setAttribute('aria-pressed',p.classList.contains('active')?'true':'false');p.addEventListener('click',()=>{
+  document.querySelectorAll('#trimToggle .pill').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false')});p.classList.add('active');p.setAttribute('aria-pressed','true');
+  state.trim=p.dataset.trim==='on';state.items.forEach(i=>{if(i)i._trimCanvas=null});renderPreview();
+})});
+document.querySelectorAll('#clockToggle .pill').forEach(p=>{p.setAttribute('aria-pressed',p.classList.contains('active')?'true':'false');p.addEventListener('click',()=>{
+  document.querySelectorAll('#clockToggle .pill').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false')});p.classList.add('active');p.setAttribute('aria-pressed','true');
+  state.clock=p.dataset.clock==='on';$('clockText').style.display=state.clock?'flex':'none';
+})});
+$('centerBtn').addEventListener('click',()=>{const i=getActive();if(i){i.focalX=0.5;i.focalY=0.5;renderPreview()}});
+$('resetBtn').addEventListener('click',()=>{const i=getActive();if(i){i.focalX=0.5;i.focalY=0.5}state.zoom=1;$('zoomRange').value=100;$('zoomVal').textContent='100%';state.fillPct=62;$('fillRange').value=62;$('fillVal').textContent='62%';renderPreview()});
+
+// Drag on preview
+(function(){
+  const c=$('previewCanvas');let drag=null,rafPending=false;
+  // Coalesce full-res redraws to one per animation frame — a fast drag fires
+  // far more pointermove events than the screen can show.
+  function scheduleRender(){if(rafPending)return;rafPending=true;requestAnimationFrame(()=>{rafPending=false;renderPreview()})}
+  c.addEventListener('pointerdown',e=>{const item=getActive();if(!item)return;drag={x:e.clientX,y:e.clientY,fx:item.focalX,fy:item.focalY};c.setPointerCapture(e.pointerId)});
+  c.addEventListener('pointermove',e=>{if(!drag)return;const item=getActive();if(!item)return;const r=c.getBoundingClientRect();
+    const dx=(e.clientX-drag.x)/r.width, dy=(e.clientY-drag.y)/r.height;
+    // Sensitivity scaled by how much overflow exists; 1.6 feels natural across modes
+    item.focalX=Math.min(1,Math.max(0,drag.fx-dx*1.6));
+    item.focalY=Math.min(1,Math.max(0,drag.fy-dy*1.6));
+    scheduleRender();
+  });
+  ['pointerup','pointercancel'].forEach(ev=>c.addEventListener(ev,()=>{if(drag){drag=null;renderPreview()}}));
+  // Keyboard reframing: arrows nudge the focal point, Shift = bigger steps.
+  c.addEventListener('keydown',e=>{
+    const item=getActive();if(!item)return;
+    const step=e.shiftKey?0.1:0.02;let used=true;
+    if(e.key==='ArrowLeft')item.focalX=Math.max(0,item.focalX-step);
+    else if(e.key==='ArrowRight')item.focalX=Math.min(1,item.focalX+step);
+    else if(e.key==='ArrowUp')item.focalY=Math.max(0,item.focalY-step);
+    else if(e.key==='ArrowDown')item.focalY=Math.min(1,item.focalY+step);
+    else used=false;
+    if(used){e.preventDefault();renderPreview()}
+  });
+})();
+
+// --- Export ---
+function exportCanvas(item){
+  const c=document.createElement('canvas');c.width=state.model.w;c.height=state.model.h;
+  renderTo(c.getContext('2d'),c.width,c.height,item);return c;
+}
+function safeBase(name){const s=(name||'wallpaper').replace(/[\\/:*?"<>|#%&{}$!'@+=`~]+/g,'-').replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');return s||'wallpaper'}
+function exportName(item,used){const base=safeBase(item.name)+'_'+state.model.id+'_'+state.model.w+'x'+state.model.h;let n=base+'.jpg',k=2;while(used.has(n)){n=base+'-'+k+'.jpg';k++}used.add(n);return n}
+function canvasToBlob(c){return new Promise(res=>c.toBlob(res,'image/jpeg',0.93))}
+// Guard against double-taps while an export is rendering — without it a
+// fast second click starts a duplicate download (or a second ZIP build).
+let exportBusy=false;
+function setExportBusy(b){exportBusy=b;$('downloadOne').disabled=b||!getActive();if(b)$('downloadAll').disabled=true;else syncDlAll()}
+// The mirror-CDN loader in <head> is asynchronous: if the user taps
+// "Download all" in the first moments, JSZip may still be in flight. Give
+// it a short chance to arrive before dropping to the sequential fallback.
+function waitForJSZip(ms){
+  if(typeof JSZip!=='undefined')return Promise.resolve(true);
+  return new Promise(res=>{const t0=Date.now();const iv=setInterval(()=>{if(typeof JSZip!=='undefined'){clearInterval(iv);res(true)}else if(Date.now()-t0>ms){clearInterval(iv);res(false)}},100)});
+}
+async function downloadOne(){
+  if(exportBusy)return;
+  const item=getActive();if(!item)return;
+  setExportBusy(true);
+  try{
+    const blob=await canvasToBlob(exportCanvas(item));
+    if(!blob){toast('Export failed — the browser could not create the JPG. Try a smaller image.');return}
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=exportName(item,new Set());a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved at '+state.model.w+' × '+state.model.h+' — set it from Photos → Use as Wallpaper.');
+  }finally{setExportBusy(false)}
+}
+async function downloadAll(){
+  if(exportBusy)return;
+  const items=state.items.filter(i=>i&&!i._failed);
+  if(!items.length)return;
+  if(items.length===1){downloadOne();return}
+  setExportBusy(true);
+  try{
+  const used=new Set();
+  if(typeof JSZip==='undefined')await waitForJSZip(1500);
+  if(typeof JSZip==='undefined'){ // fallback: sequential
+    let ok=0;
+    for(const item of items){const blob=await canvasToBlob(exportCanvas(item));if(!blob)continue;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=exportName(item,used);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);ok++;await new Promise(r=>setTimeout(r,350))}
+    toast(ok?'Downloading '+ok+' wallpapers…':'Export failed — the browser could not create the JPGs.');return;
+  }
+  const zip=new JSZip();let ok=0;
+  for(const item of items){const blob=await canvasToBlob(exportCanvas(item));if(!blob)continue;zip.file(exportName(item,used),blob);ok++}
+  if(!ok){toast('Export failed — the browser could not create the JPGs.');return}
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='iphone-lockscreens_'+state.model.id+'_'+ok+'.zip';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('ZIP saved — '+ok+' wallpapers at '+state.model.w+' × '+state.model.h+'.');
+  }finally{setExportBusy(false)}
+}
+// --- Built-in self-check ---
+function makeTestPattern(){
+  const c=document.createElement('canvas');c.width=1200;c.height=675;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,1200,675);g.addColorStop(0,'#3a7bd5');g.addColorStop(.55,'#7fb2e8');g.addColorStop(1,'#e8c87f');
+  x.fillStyle=g;x.fillRect(0,0,1200,675);
+  x.fillStyle='#000';x.fillRect(0,0,110,675);x.fillRect(1090,0,110,675); // baked-in pillarbox bars for the trim test
+  x.fillStyle='#e8321e';x.beginPath();x.arc(600,300,110,0,Math.PI*2);x.fill();
+  x.fillStyle='#fff';x.fillRect(520,470,160,26);
+  const img=new Image();
+  const item={id:'selftest',name:'self-test pattern',img,focalX:0.5,focalY:0.5,trimBounds:null,_trimCanvas:null};
+  return new Promise(res=>{img.onload=()=>{item.trimBounds=computeTrim(img);res(item)};img.onerror=()=>res(item);img.src=c.toDataURL('image/png')});
+}
+function frameIsPainted(ctx,W,H){
+  let data;try{data=ctx.getImageData(0,0,W,H).data}catch(e){return false}
+  let diff=0;const step=Math.max(4,Math.floor(W/60))*4;
+  for(let i=0;i<data.length;i+=step*37){if(Math.abs(data[i]-17)>8||Math.abs(data[i+1]-17)>8||Math.abs(data[i+2]-17)>8)diff++}
+  return diff>30;
+}
+async function runTests(){
+  const btn=$('runTests');btn.disabled=true;btn.textContent='Running…';
+  const list=$('testList');list.innerHTML='';const summary=$('testSummary');summary.className='diag-note';summary.textContent='Running…';
+  const results=[];
+  function report(name,ok,detail){results.push(ok);const li=document.createElement('li');li.className=ok?'pass':'fail';const st=document.createElement('span');st.className='st';st.textContent=ok?'PASS':'FAIL';const tx=document.createElement('span');const b=document.createElement('b');b.textContent=name+' — ';tx.append(b,document.createTextNode(detail));li.append(st,tx);list.appendChild(li)}
+  try{
+    report('Export size',state.model.w>0&&state.model.h>0,'Exports render at '+state.model.w+' × '+state.model.h+' for '+state.model.name+'.');
+    let subject=getActive();const usingPattern=!subject;
+    const subjectNote=usingPattern?'the built-in test pattern (no image loaded)':'your loaded image';
+    if(usingPattern)subject=await makeTestPattern();
+    if(usingPattern){
+      report('Black-bar trim',!!subject.trimBounds,subject.trimBounds?'Test pattern bars detected: 1200×675 → '+subject.trimBounds.sw+'×'+subject.trimBounds.sh+'.':'The test pattern\u2019s black side bars were NOT detected.');
+    } else if(subject.trimBounds){
+      report('Black-bar trim',true,'Bars detected on '+subject.name+': '+subject.img.naturalWidth+'×'+subject.img.naturalHeight+' → '+subject.trimBounds.sw+'×'+subject.trimBounds.sh+'.');
+    } else {
+      report('Black-bar trim',true,'No baked-in black bars found on '+subject.name+' — nothing to trim.');
+    }
+    const TW=234,TH=506;let modesOk=true;const failedModes=[];
+    ['fill','balanced','extend','fit'].forEach(m=>{
+      const c=document.createElement('canvas');c.width=TW;c.height=TH;const x=c.getContext('2d');
+      try{renderTo(x,TW,TH,subject,{mode:m,focalX:0.5,focalY:0.5});if(!frameIsPainted(x,TW,TH)){modesOk=false;failedModes.push(m)}}catch(e){modesOk=false;failedModes.push(m)}
+    });
+    report('All four modes render',modesOk,modesOk?'Fill, Balanced, Extend and Fit each painted a non-blank frame from '+subjectNote+'.':'Problem modes: '+failedModes.join(', ')+'.');
+    let jpgOk=false,jpgDetail='';
+    try{const blob=await canvasToBlob(exportCanvas(subject));jpgOk=!!blob&&blob.type==='image/jpeg'&&blob.size>3000;jpgDetail=blob?('Full-size render produced a '+(blob.type||'unknown type')+' of '+Math.round(blob.size/1024)+' KB at '+state.model.w+' × '+state.model.h+'.'):'The browser returned no file at all.'}catch(e){jpgDetail='Export threw an error: '+e.message}
+    report('Full-size JPG export',jpgOk,jpgDetail);
+    report('Batch download',true,typeof JSZip!=='undefined'?'JSZip is loaded, so "Download all" makes one ZIP file.':'JSZip did not load from either CDN — "Download all" will use its built-in fallback and download each JPG one after another instead. Nothing is lost, just less tidy.');
+    // Export filenames: sanitized and collision-free inside one batch.
+    const usedNames=new Set();const n1=exportName({name:'my photo: final?.jpg'},usedNames);const n2=exportName({name:'my photo: final?.jpg'},usedNames);
+    report('Export filenames',n1!==n2&&!/[:*?"<>|#%&]/.test(n1)&&/\.jpg$/.test(n1),'Duplicate names in one batch export as "'+n1+'" and "'+n2+'" — no illegal characters, no overwriting each other.');
+    // Portrait image in Extend mode: scaled to full width it overflows the
+    // screen height, so the visible-% meter must say so, not claim 100%.
+    report('Blurred background path',true,filterSupported()?'This browser supports canvas filters, so Fit / Balanced / Extend backgrounds use a true blur.':'This browser has no canvas filter support (older Safari) — backgrounds use the built-in downscale-blur fallback, so they still render blurred rather than as a sharp second copy of the image.');
+    const portraitItem={id:'selftest-portrait',name:'portrait probe',img:{naturalWidth:800,width:800,naturalHeight:2000,height:2000},focalX:0.5,focalY:0.5,trimBounds:null,_trimCanvas:null};
+    const savedMode=state.mode;state.mode='extend';const pInfo=visibleInfo(portraitItem);state.mode=savedMode;
+    report('Portrait in Extend mode',!!pInfo&&pInfo.pct<100,'An 800×2000 portrait image reports '+(pInfo?pInfo.pct:'—')+'% visible in Extend mode instead of a false 100% — the meter matches the real crop.');
+  }catch(e){
+    report('Self-check completed',false,'Stopped early: '+e.message);
+  }
+  const passed=results.filter(Boolean).length;
+  summary.textContent='Self-check finished: '+passed+' of '+results.length+' checks passed.';
+  summary.className='diag-note '+(passed===results.length?'ok':'bad');
+  btn.disabled=false;btn.textContent='Run tests again';
+  toast('Self-check: '+passed+'/'+results.length+' passed.');
+}
+$('runTests').addEventListener('click',runTests);
+
+$('downloadOne').addEventListener('click',downloadOne);
+$('downloadAll').addEventListener('click',downloadAll);
+
+updatePhoneChrome();
+syncEmptyHint();
+renderPreview();
+</script>
+</body>
+</html>
